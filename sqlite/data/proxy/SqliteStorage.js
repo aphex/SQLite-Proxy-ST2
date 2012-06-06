@@ -25,7 +25,6 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 		me.setTable();
 	},
 
-
 	/* INTERFACE FUNCTIONS */
 
 	//inherit docs
@@ -154,16 +153,21 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 				filters = operation.getFilters(),
 				fieldTypes = {};
 
-		grouper = this.applyGrouper(grouper);
-		filters = this.applyFilters(filters);
-		sorters = this.applySorters(sorters);
 
-		// generate sql
 		var sql = "SELECT _ROWID_,*\nFROM " + me.getDbConfig().tablename;
-		if (filters != null) sql += me.whereClause(filters);
-		if (grouper != null) sql += me.groupClause(grouper);
-		if (sorters != null) sql += me.orderClause(sorters);
-		if (limit != null && start != null) sql += me.limitClause(limit, start);
+		if(!operation.config.hasOwnProperty("query")) {
+			grouper = this.applyGrouper(grouper);
+			filters = this.applyFilters(filters);
+			sorters = this.applySorters(sorters);
+
+			// generate sql
+			if (filters != null) sql += me.whereClause(filters);
+			if (grouper != null) sql += me.groupClause(grouper);
+			if (sorters != null) sql += me.orderClause(sorters);
+			if (limit != null && start != null) sql += me.limitClause(limit, start);
+		}else{
+			sql = operation.config.query;
+		}
 		var onSuccess, onError;
 
 		onSuccess = function (tx, results) {
@@ -366,6 +370,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 
 	whereClause: function (filters) {
 		var me = this,
+				firstProperty = true,
 				firstFilter = true,
 				sql = '',
 				fieldTypes = {};
@@ -375,43 +380,54 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 		});
 
 		Ext.each(filters, function (filter) {
-			// need to make sure this property is in the database
-			if (!Ext.isDefined(fieldTypes[filter.getProperty()]))
-				return;
+			//force filter property to be an array
+			var filterProperties = Ext.isArray(filter.getProperty()) ?filter.getProperty() : [filter.getProperty()];
+
+			//Confirm all filter properties are fields
+			if(!Ext.each(filterProperties, function(filterProperty){
+				// need to make sure this property is in the database
+				if (!Ext.isDefined(fieldTypes[filterProperty])) return false;
+			})) return;
 
 			if (!firstFilter) sql += "\n  AND";
 			else sql += "\nWHERE\n     ";
 			firstFilter = false;
+			firstProperty = true;
 
-			sql += ' `' + filter.getProperty() + '`';
+			Ext.each(filterProperties, function(filterProperty){
+				//Separate all properties with OR
+				if (!firstProperty) sql += " OR ";
+				firstProperty = false;
 
-			// now: do we use like or =?
-			var fieldType = fieldTypes[filter.getProperty()].toUpperCase();
+				sql += ' `' + filterProperty + '`';
+				var fieldType = fieldTypes[filterProperty].toUpperCase();
 
-			if(typeof filter.getFilterFn() == 'string'){
-				sql += " " + filter.getFilterFn();
-			}else{
-				if (fieldType == 'TEXT' &&
-						!filter.getCaseSensitive()) sql += ' LIKE';
-				else sql += ' =';
-			}
-
-			// need to surround with %?
-			if (!filter.getExactMatch() &&
-					fieldType == 'TEXT') {
-				sql += " '%" + filter.getValue() + "%'";
-			} else if (fieldType == 'TEXT') {
-				sql += " '" + filter.getValue() + "'";
-			} else if (fieldType == 'boolean') {
-				if (filter.getValue()) {
-					sql += " 'true'";
+				// now: do we use like or =?
+				if(typeof filter.getFilterFn() == 'string'){
+					sql += " " + filter.getFilterFn();
+				}else{
+					if (fieldType == 'TEXT' &&
+							!filter.getCaseSensitive()) sql += ' LIKE';
+					else sql += ' =';
 				}
-				else {
-					sql += " 'false'";
+
+				// need to surround with %?
+				if (!filter.getExactMatch() &&
+						fieldType == 'TEXT') {
+					sql += " '%" + filter.getValue() + "%'";
+				} else if (fieldType == 'TEXT') {
+					sql += " '" + filter.getValue() + "'";
+				} else if (fieldType == 'boolean') {
+					if (filter.getValue()) {
+						sql += " 'true'";
+					}
+					else {
+						sql += " 'false'";
+					}
+				} else {
+					sql += ' ' + filter.getValue();
 				}
-			} else {
-				sql += ' ' + filter.getValue();
-			}
+			});
 		});
 
 		return sql;
@@ -420,7 +436,6 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 	orderClause: function (sorters) {
 		var me = this,
 				sql = '',
-				orders = [],
 				fields = {},
 				firstOrder = true;
 
