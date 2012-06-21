@@ -178,7 +178,6 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			me.throwDbError(tx, err);
 		};
 
-		console.log(sql);
 		me.transactionDB(me.getDb(), [function (tx) {
 			tx.executeSql(sql, [], onSuccess, onError);
 		}], Ext.emptyFn, Ext.emptyFn);
