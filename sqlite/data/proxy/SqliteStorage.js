@@ -178,6 +178,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			me.throwDbError(tx, err);
 		};
 
+		console.log(sql);
 		me.transactionDB(me.getDb(), [function (tx) {
 			tx.executeSql(sql, [], onSuccess, onError);
 		}], Ext.emptyFn, Ext.emptyFn);
@@ -382,6 +383,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 		Ext.each(filters, function (filter) {
 			//force filter property to be an array
 			var filterProperties = Ext.isArray(filter.getProperty()) ?filter.getProperty() : [filter.getProperty()];
+			var filterValues = Ext.isArray(filter.getValue()) ?filter.getValue() : [filter.getValue()];
 
 			//Confirm all filter properties are fields
 			if(!Ext.each(filterProperties, function(filterProperty){
@@ -389,44 +391,49 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 				if (!Ext.isDefined(fieldTypes[filterProperty])) return false;
 			})) return;
 
-			if (!firstFilter) sql += "\n  AND";
+			var propertyConcat = filter.config.hasOwnProperty("propertyIsAny") ? filter.config.propertyIsAny ? "AND" : "OR" : "AND";
+			var valueConcat = filter.config.hasOwnProperty("valueIsAny") ? filter.config.valueIsAny ? "AND" : "OR" : "OR";
+
+			if (!firstFilter) sql += "\n "+propertyConcat ;
 			else sql += "\nWHERE\n     ";
 			firstFilter = false;
 			firstProperty = true;
 
 			Ext.each(filterProperties, function(filterProperty){
-				//Separate all properties with OR
-				if (!firstProperty) sql += " OR ";
-				firstProperty = false;
+				Ext.each(filterValues, function(filterValue){
+					//Separate all properties with OR
+					if (!firstProperty) sql += " "+valueConcat+" ";
+					firstProperty = false;
 
-				sql += ' `' + filterProperty + '`';
-				var fieldType = fieldTypes[filterProperty].toUpperCase();
+					sql += ' `' + filterProperty + '`';
+					var fieldType = fieldTypes[filterProperty].toUpperCase();
 
-				// now: do we use like or =?
-				if(typeof filter.getFilterFn() == 'string'){
-					sql += " " + filter.getFilterFn();
-				}else{
-					if (fieldType == 'TEXT' &&
-							!filter.getCaseSensitive()) sql += ' LIKE';
-					else sql += ' =';
-				}
-
-				// need to surround with %?
-				if (!filter.getExactMatch() &&
-						fieldType == 'TEXT') {
-					sql += " '%" + filter.getValue() + "%'";
-				} else if (fieldType == 'TEXT') {
-					sql += " '" + filter.getValue() + "'";
-				} else if (fieldType == 'boolean') {
-					if (filter.getValue()) {
-						sql += " 'true'";
+					// now: do we use like or =?
+					if(typeof filter.getFilterFn() == 'string'){
+						sql += " " + filter.getFilterFn();
+					}else{
+						if (fieldType == 'TEXT' &&
+								!filter.getCaseSensitive()) sql += ' LIKE';
+						else sql += ' =';
 					}
-					else {
-						sql += " 'false'";
+
+					// need to surround with %?
+					if (!filter.getExactMatch() &&
+							fieldType == 'TEXT') {
+						sql += " '%" + filterValue + "%'";
+					} else if (fieldType == 'TEXT') {
+						sql += " '" + filterValue + "'";
+					} else if (fieldType == 'boolean') {
+						if (filter.getValue()) {
+							sql += " 'true'";
+						}
+						else {
+							sql += " 'false'";
+						}
+					} else {
+						sql += ' ' + filterValue;
 					}
-				} else {
-					sql += ' ' + filter.getValue();
-				}
+				});
 			});
 		});
 
