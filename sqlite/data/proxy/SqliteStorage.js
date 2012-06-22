@@ -164,7 +164,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			if (filters != null) sql += me.whereClause(filters);
 			if (grouper != null) sql += me.groupClause(grouper);
 			if (sorters != null) sql += me.orderClause(sorters);
-			if (limit != null && start != null) sql += me.limitClause(limit, start);
+			if (!isNaN(limit) && !isNaN(start)) sql += me.limitClause(limit, start);
 		}else{
 			sql = operation.config.query;
 		}
@@ -501,8 +501,8 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 	},
 	limitClause: function (limit, start) {
 		var sql = "\nLIMIT";
-		if (start != null) sql += ' ' + start + ',';
-		if (limit != null) sql += ' ' + limit;
+		if (!isNaN(start)) sql += ' ' + start + ',';
+		if (!isNaN(limit)) sql += ' ' + limit;
 		return sql;
 	},
 
