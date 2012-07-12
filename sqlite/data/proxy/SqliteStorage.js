@@ -153,8 +153,8 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 				filters = operation.getFilters(),
 				fieldTypes = {};
 
-
 		var sql = "SELECT _ROWID_,*\nFROM " + me.getDbConfig().tablename;
+
 		if(!operation.config.hasOwnProperty("query")) {
 			grouper = this.applyGrouper(grouper);
 			filters = this.applyFilters(filters);
@@ -164,14 +164,31 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			if (filters != null) sql += me.whereClause(filters);
 			if (grouper != null) sql += me.groupClause(grouper);
 			if (sorters != null) sql += me.orderClause(sorters);
-			if (!isNaN(limit) && !isNaN(start)) sql += me.limitClause(limit, start);
 		}else{
 			sql = operation.config.query;
 		}
+
+		var regExp = /select(.*\n*)from/gi;
+		var sql_count = sql.replace(regExp, "SELECT count(*) as total FROM");
+		if (!isNaN(limit) && limit != null) sql += me.limitClause(limit, start);
 		var onSuccess, onError;
 
+		var countGroups = operation.config.hasOwnProperty("countTotals") ? operation.config.countTotals : true;
 		onSuccess = function (tx, results) {
-			me.applyDataToModel(tx, results, operation, callback, scope);
+			me.transactionDB(me.getDb(), [function (tx) {
+				tx.executeSql(sql_count, [], function(count_tx, count_results){
+					var total_count = count_results.rows.length;
+					if(countGroups){
+						total_count = 0;
+						for (var i=0;i<count_results.rows.length;i++) {
+							var item = count_results.rows.item(i);
+							total_count += parseInt(item.total);
+						}
+					}
+					me.applyDataToModel(tx, results, total_count, operation, callback, scope);
+				}, onError);
+			}], Ext.emptyFn, Ext.emptyFn);
+
 		};
 
 		onError = function (tx, err) {
@@ -501,8 +518,9 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 	},
 	limitClause: function (limit, start) {
 		var sql = "\nLIMIT";
-		if (!isNaN(start)) sql += ' ' + start + ',';
-		if (!isNaN(limit)) sql += ' ' + limit;
+		if(isNaN(start) || start == null) start = 0;
+		sql += ' ' + start + ',';
+		sql += ' ' + limit;
 		return sql;
 	},
 
@@ -518,7 +536,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 		return data;
 	},
 
-	applyData: function (data, operation, callback, scope) {
+	applyData: function (data, total_count, operation, callback, scope) {
 		var me = this;
 
 		operation.setSuccessful();
@@ -526,7 +544,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 
 		operation.setResultSet(Ext.create('Ext.data.ResultSet', {
 			records: data,
-			total: data.length,
+			total: total_count,
 			loaded: true
 		}));
 
@@ -538,7 +556,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 		}
 	},
 
-	applyDataToModel: function (tx, results, operation, callback, scope) {
+	applyDataToModel: function (tx, results, total_count, operation, callback, scope) {
 
 		var me = this,
 				Model = me.getModel(),
@@ -566,7 +584,7 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			}
 		}
 
-		me.applyData(storedatas, operation, callback, scope);
+		me.applyData(storedatas, total_count, operation, callback, scope);
 	},
 
 
