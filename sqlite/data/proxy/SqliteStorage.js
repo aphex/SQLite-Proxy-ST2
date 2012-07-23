@@ -115,17 +115,17 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 			if (typeof callback == 'function') {
 				callback.call(scope, operation);
 			}
-		},
-				onError = function (tx, err) {
-					operation.setCompleted();
-					operation.setException(err ? err : '');
-					if (typeof callback == 'function') {
-						callback.call(scope, operation);
-					}
-				};
+		};
+
+		onError = function (tx, err) {
+			operation.setCompleted();
+			operation.setException(err ? err : '');
+			if (typeof callback == 'function') {
+				callback.call(scope, operation);
+			}
+		};
 
 		operation.setStarted();
-
 		for (i = 0; i < length; i++) {
 			queries.push(this.getDeleteRecordFunc(records[i], me.getDbConfig().tablename));
 		}
