@@ -202,9 +202,13 @@ Ext.define('Sqlite.data.proxy.SqliteStorage', {
 
 
 	/* GENERAL DB FUNCTIONS */
-
 	getDb: function () {
-		return this.getDbConfig().dbConn.dbConn;
+		if(!this.cachedDb){
+			this.cachedDb = this.getDbConfig().dbConn;
+			if(Ext.isFunction(this.cachedDb)) this.cachedDb = this.cachedDb();
+			if(this.cachedDb.hasOwnProperty("dbConn")) this.cachedDb = this.cachedDb.dbConn;
+		}
+		return this.cachedDb;
 	},
 
 	throwDbError: function (tx, err) {
